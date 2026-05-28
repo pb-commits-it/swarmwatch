@@ -64,6 +64,10 @@ class SpanStore:
         ).fetchall()
         return [Span.model_validate_json(row[0]) for row in rows]
 
+    def all_spans(self) -> list[Span]:
+        rows = self.con.execute("SELECT data FROM spans ORDER BY start_time").fetchall()
+        return [Span.model_validate_json(row[0]) for row in rows]
+
     def list_traces(self) -> list[str]:
         rows = self.con.execute("SELECT DISTINCT trace_id FROM spans").fetchall()
         return [row[0] for row in rows]

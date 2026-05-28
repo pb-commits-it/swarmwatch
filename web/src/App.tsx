@@ -3,12 +3,13 @@ import { agentSpan } from "./analysis";
 import DevTools from "./DevTools";
 import Inspector, { InspectorState } from "./Inspector";
 import LivingGraph, { Activity } from "./LivingGraph";
-import { AgentSummary, FullTrace, ROLE_COLORS, roleOf, SpanEvent } from "./types";
+import { AgentSummary, FullTrace, ROLE_COLORS, roleOf, Span, SpanEvent } from "./types";
 
 // three.js is heavy — only load the 3D view (and three) when it's opened.
 const Constellation = lazy(() => import("./Constellation"));
 
 type View = "graph" | "constellation" | "devtools";
+type Mode = "replay" | "live";
 
 interface Counters {
   spans: number;
@@ -44,9 +45,19 @@ function useDimensions() {
   return [ref, dim] as const;
 }
 
+function buildGraphData(agents: AgentSummary[], edges: { src: string; dst: string }[]): GraphData {
+  const nodes = agents.map((a) => {
+    const role = roleOf(a.name);
+    return { id: a.name, role, color: ROLE_COLORS[role] };
+  });
+  const links = edges.map((e) => ({ source: e.src, target: e.dst }));
+  return { nodes, links };
+}
+
 export default function App() {
   const [status, setStatus] = useState("connecting");
   const [view, setView] = useState<View>("graph");
+  const [mode, setMode] = useState<Mode>("replay");
   const [workflow, setWorkflow] = useState<string | null>(null);
   const [counters, setCounters] = useState<Counters>(ZERO);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -60,6 +71,7 @@ export default function App() {
   const activityRef = useRef<Map<string, Activity>>(new Map());
   const graphDataRef = useRef<GraphData | null>(null);
   const esRef = useRef<EventSource | null>(null);
+  const seenSpansRef = useRef<Set<string>>(new Set());
 
   const [stageRef, dim] = useDimensions();
 
@@ -78,6 +90,30 @@ export default function App() {
       if (++n < 4) setTimeout(fire, 120);
     };
     fire();
+  }
+
+  function applyTopology(d: { workflow: string | null; agents: AgentSummary[]; edges: { src: string; dst: string }[] }) {
+    setWorkflow(d.workflow);
+    setAgents(d.agents);
+    const gd = buildGraphData(d.agents, d.edges);
+    graphDataRef.current = gd;
+    setGraphData(gd);
+    // Initialize / preserve live tallies for the agent set.
+    setLive((prev) => {
+      const next: Record<string, Live> = {};
+      d.agents.forEach((a) => {
+        next[a.name] = prev[a.name] || { llm: 0, tool: 0, tokens: 0, activeAt: 0 };
+      });
+      return next;
+    });
+  }
+
+  function appendSpan(s: Span) {
+    if (seenSpansRef.current.has(s.span_id)) return;
+    seenSpansRef.current.add(s.span_id);
+    setFullTrace((prev) =>
+      prev ? { ...prev, spans: [...prev.spans, s], total_spans: prev.spans.length + 1 } : prev,
+    );
   }
 
   function onSpan(s: SpanEvent) {
@@ -111,8 +147,7 @@ export default function App() {
     }
   }
 
-  function connect(spd: string = speed) {
-    esRef.current?.close();
+  function resetTallies() {
     activityRef.current.clear();
     setCounters(ZERO);
     setLive((prev) => {
@@ -120,14 +155,42 @@ export default function App() {
       Object.keys(prev).forEach((k) => (z[k] = { llm: 0, tool: 0, tokens: 0, activeAt: 0 }));
       return z;
     });
+  }
+
+  function connect(m: Mode, spd: string = speed) {
+    esRef.current?.close();
+    resetTallies();
+    seenSpansRef.current = new Set();
     setStatus("replaying");
 
-    const es = new EventSource(`/api/stream?speed=${spd}`);
+    const url = m === "live" ? "/api/live" : `/api/stream?speed=${spd}`;
+    const es = new EventSource(url);
     esRef.current = es;
-    es.addEventListener("trace", () => {
-      setTimeout(() => fgRef.current?.zoomToFit(500, 70), 300);
+
+    es.addEventListener("trace", (e: MessageEvent) => {
+      try {
+        const d = JSON.parse(e.data);
+        if (m === "live") {
+          applyTopology(d);
+          setFullTrace((prev) => ({
+            trace_id: d.trace_id,
+            workflow: d.workflow,
+            agents: d.agents,
+            edges: d.edges,
+            total_spans: prev?.spans.length ?? 0,
+            spans: prev?.spans ?? [],
+          }));
+        }
+      } catch {
+        /* noop */
+      }
+      setTimeout(() => fgRef.current?.zoomToFit?.(500, 70), 300);
     });
-    es.addEventListener("span", (e: MessageEvent) => onSpan(JSON.parse(e.data)));
+    es.addEventListener("span", (e: MessageEvent) => {
+      const s: SpanEvent = JSON.parse(e.data);
+      onSpan(s);
+      if (m === "live") appendSpan(s);
+    });
     es.addEventListener("done", () => {
       es.close();
       setStatus("done");
@@ -138,31 +201,25 @@ export default function App() {
     };
   }
 
-  // Load the full trace once (graph topology, DevTools, Handoff Inspector),
-  // then start the live replay stream.
+  // First-load orchestration: figure out the initial mode from the URL, load
+  // the matching topology + spans, then start streaming.
   useEffect(() => {
     let alive = true;
-    fetch("/api/trace")
+    const p = new URLSearchParams(window.location.search);
+    const startMode: Mode = p.get("mode") === "live" ? "live" : "replay";
+    setMode(startMode);
+
+    const endpoint = startMode === "live" ? "/api/live-trace" : "/api/trace";
+    fetch(endpoint)
       .then((r) => r.json())
       .then((d: FullTrace) => {
         if (!alive) return;
         setFullTrace(d);
-        setWorkflow(d.workflow);
-        setAgents(d.agents);
-        const nodes = d.agents.map((a) => {
-          const role = roleOf(a.name);
-          return { id: a.name, role, color: ROLE_COLORS[role] };
-        });
-        const links = d.edges.map((e) => ({ source: e.src, target: e.dst }));
-        const gd: GraphData = { nodes, links };
-        graphDataRef.current = gd;
-        setGraphData(gd);
-        const init: Record<string, Live> = {};
-        d.agents.forEach((a) => (init[a.name] = { llm: 0, tool: 0, tokens: 0, activeAt: 0 }));
-        setLive(init);
+        applyTopology({ workflow: d.workflow, agents: d.agents, edges: d.edges });
+        if (startMode === "live") {
+          d.spans.forEach((s) => seenSpansRef.current.add(s.span_id));
+        }
 
-        // Deep links: share a view, a handoff, or a span directly.
-        const p = new URLSearchParams(window.location.search);
         const v = p.get("view");
         if (v === "devtools" || v === "graph" || v === "constellation") setView(v);
         const src = p.get("src");
@@ -171,7 +228,7 @@ export default function App() {
         if (src && dst) setInspector({ type: "handoff", src, dst });
         else if (span) setInspector({ type: "span", spanId: span });
 
-        connect();
+        connect(startMode);
       });
     return () => {
       alive = false;
@@ -179,6 +236,21 @@ export default function App() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function switchMode(m: Mode) {
+    if (m === mode) return;
+    setMode(m);
+    const endpoint = m === "live" ? "/api/live-trace" : "/api/trace";
+    fetch(endpoint)
+      .then((r) => r.json())
+      .then((d: FullTrace) => {
+        setFullTrace(d);
+        applyTopology({ workflow: d.workflow, agents: d.agents, edges: d.edges });
+        seenSpansRef.current = new Set();
+        if (m === "live") d.spans.forEach((s) => seenSpansRef.current.add(s.span_id));
+        connect(m);
+      });
+  }
 
   function inspectSpan(id: string) {
     setInspector({ type: "span", spanId: id });
@@ -193,9 +265,16 @@ export default function App() {
   }
 
   const statusLabel =
-    status === "replaying" ? "replaying" : status === "done" ? "replay complete" : status;
+    status === "replaying"
+      ? mode === "live"
+        ? "listening"
+        : "replaying"
+      : status === "done"
+        ? "replay complete"
+        : status;
   const pillClass = status === "replaying" ? "live" : status === "done" ? "done" : "";
   const showPanels = view === "graph" || view === "constellation";
+  const liveEmpty = mode === "live" && counters.spans === 0;
 
   return (
     <div className="app">
@@ -220,23 +299,45 @@ export default function App() {
             </button>
           ))}
         </div>
+        <div className="tabs">
+          {(
+            [
+              ["replay", "Sample"],
+              ["live", "Live"],
+            ] as const
+          ).map(([m, label]) => (
+            <button
+              key={m}
+              className={`tab ${mode === m ? "active" : ""}`}
+              onClick={() => switchMode(m)}
+              title={m === "live" ? "Spans pushed via POST /v1/traces" : "Bundled sample replay"}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
         <span className="workflow">{workflow ? `workflow: ${workflow}` : "—"}</span>
         <span className="spacer" />
         <span className={`pill ${pillClass}`}>{statusLabel}</span>
-        <select
-          value={speed}
-          title="Replay speed"
-          onChange={(e) => {
-            setSpeed(e.target.value);
-            connect(e.target.value);
-          }}
-        >
-          <option value="1">1×</option>
-          <option value="2">2×</option>
-          <option value="4">4×</option>
-          <option value="0.5">0.5×</option>
-        </select>
-        <button onClick={() => connect()}>↻ Replay</button>
+        {mode === "replay" && (
+          <>
+            <select
+              value={speed}
+              title="Replay speed"
+              onChange={(e) => {
+                setSpeed(e.target.value);
+                connect("replay", e.target.value);
+              }}
+            >
+              <option value="1">1×</option>
+              <option value="2">2×</option>
+              <option value="4">4×</option>
+              <option value="0.5">0.5×</option>
+            </select>
+            <button onClick={() => connect("replay")}>↻ Replay</button>
+          </>
+        )}
+        {mode === "live" && <button onClick={() => connect("live")}>↻ Reconnect</button>}
       </header>
 
       <div className="counters">
@@ -284,6 +385,7 @@ export default function App() {
           <>
             <div className="float agents">
               <h2>Agents</h2>
+              {agents.length === 0 && <div className="empty">no agents yet</div>}
               {agents.map((a) => {
                 const l = live[a.name] || { llm: 0, tool: 0, tokens: 0, activeAt: 0 };
                 const active = l.activeAt > 0 && Date.now() - l.activeAt < 1100;
@@ -305,13 +407,31 @@ export default function App() {
                 <span className="key" style={{ borderColor: "#7dd3fc" }} /> handoff — particles are
                 context flowing
               </div>
-              <div className="note">
-                <b>Click any edge</b> to inspect the handoff — see what one agent sent vs. what the
-                next received. Watch the planner drop “time-series” into <b>worker-1</b>; the swarm
-                then picks the wrong database. The bug lives in the edge.
-              </div>
+              {mode === "replay" && (
+                <div className="note">
+                  <b>Click any edge</b> to inspect the handoff — see what one agent sent vs. what the
+                  next received. Watch the planner drop “time-series” into <b>worker-1</b>; the swarm
+                  then picks the wrong database. The bug lives in the edge.
+                </div>
+              )}
+              {mode === "live" && (
+                <div className="note">
+                  <b>Live mode.</b> Spans posted to <code>POST&nbsp;/v1/traces</code> from any
+                  OpenTelemetry-instrumented app. Try the bundled SDK:
+                  <br />
+                  <code>pip install 'swarmwatch[sdk]'</code>
+                  <br />
+                  <code>python&nbsp;examples/from_scratch_loop.py</code>
+                </div>
+              )}
             </div>
           </>
+        )}
+
+        {liveEmpty && view !== "devtools" && (
+          <div className="live-empty">
+            waiting for traces — point your OTel exporter at <code>/v1/traces</code>
+          </div>
         )}
 
         {view === "devtools" && fullTrace && (

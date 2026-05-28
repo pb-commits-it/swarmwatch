@@ -44,11 +44,21 @@ The showpiece.
 
 _Exit: the showpiece video exists._
 
-### v1.0 — *Launch*
-- Thin Python **decorator SDK** (`@swarmwatch.agent / .tool / .llm`) for a 10-second quickstart
-- "Point your OTel exporter here" docs
-- Worked examples: LangGraph, CrewAI, from-scratch loop
-- **Hosted live demo** (replay mode — no backend needed for viewers)
-- Tests + CI; `ARCHITECTURE.md` finalized
+### v1.0 — *Launch* (in progress)
+
+**Shipped:**
+- **Live OTLP/HTTP receiver** at `POST /v1/traces` (protobuf + JSON wire formats) — point any OpenTelemetry-instrumented app at it — ✅
+- **Python SDK** (`swarmwatch.sdk.SwarmWatch` — context-manager API over OTel) for ten-second instrumentation; `pip install 'swarmwatch[sdk]'` — ✅
+- **Live mode** in the UI (Sample / Live toggle, `?mode=live`) with `/api/live` SSE broadcasting newly-ingested spans + topology updates as agents appear — ✅
+- A worked from-scratch example (`examples/from_scratch_loop.py`) — ✅
+- OTLP parser tests (JSON + protobuf round-trip) — ✅
+- ARCHITECTURE.md kept in sync — ✅
+
+**Remaining for the public launch:**
+- LangGraph + CrewAI worked examples (alongside the from-scratch one)
+- Hosted live demo on IONOS under a personal domain
+- <90s problem-first captioned demo video + a looping hero GIF
+- Deep-dive blog post + Show HN post (12–17 UTC) + X thread
+- Seed genuine social proof (issues/PRs into target labs' agent SDKs)
 
 _Exit: anyone can `pip install`, see the demo in 10 seconds, and instrument their own swarm._

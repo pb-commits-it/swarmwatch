@@ -8,6 +8,7 @@ single span — we read whichever one is present.
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from swarmwatch.model.spans import Message, Span, SpanKind, Usage
@@ -64,7 +65,16 @@ def _messages(value: Any) -> list[Message]:
     if value is None:
         return []
     if isinstance(value, str):
-        return [Message(role="text", content=value)]
+        # OTel attributes can't hold complex objects directly, so messages often
+        # arrive JSON-encoded; try to parse, fall back to plain text.
+        stripped = value.strip()
+        if stripped.startswith(("[", "{")):
+            try:
+                value = json.loads(stripped)
+            except json.JSONDecodeError:
+                return [Message(role="text", content=value)]
+        else:
+            return [Message(role="text", content=value)]
     if isinstance(value, dict):
         value = [value]
     messages: list[Message] = []

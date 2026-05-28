@@ -52,7 +52,7 @@ Building in public, in stages. See **[ROADMAP.md](ROADMAP.md)** for what's shipp
 - **v0.2 — *It comes alive*** · the 2D Living Graph — ✅ shipped
 - **v0.3 — *It debugs*** · DevTools mode + Handoff Inspector — ✅ shipped
 - **v0.4 — *It's beautiful*** · 3D Constellation — ✅ shipped
-- **v1.0 — *Launch*** · SDK, framework integrations, hosted demo — _next_
+- **v1.0 — *Launch*** · SDK, OTLP receiver, Live mode, framework integrations, hosted demo — _in progress_
 
 ## Quickstart
 
@@ -66,7 +66,40 @@ swarmwatch up
 
 Open **http://127.0.0.1:8000** and watch the bundled planner→worker→judge swarm replay live in the **Living Graph** — handoffs animate as particle flows, nodes pulse as they fire LLM/tool calls. Switch to **DevTools** for the span flamegraph, and **click any handoff edge** to open the Inspector and see the context that got dropped between agents. Point it at your own recorded run with `swarmwatch up --trace path/to/trace.jsonl`.
 
-> v0.4 ships all three view modes — Living Graph, 3D Constellation, DevTools — plus the Handoff Inspector. v1.0 (SDK + framework integrations + hosted demo) is next on the [roadmap](ROADMAP.md).
+> v0.4 ships all three view modes — Living Graph, 3D Constellation, DevTools — plus the Handoff Inspector. v1.0 adds the live ingest endpoint + Python SDK so you can point your own agents at it (see below).
+
+## Use it with your own agents
+
+Instrument any Python code in a few lines — the SDK is a thin layer over the OpenTelemetry GenAI conventions, so the same spans work with any OTel backend, not just swarmwatch:
+
+```bash
+pip install 'swarmwatch[sdk]'
+swarmwatch up &
+```
+
+```python
+from swarmwatch.sdk import SwarmWatch
+
+sw = SwarmWatch()  # POSTs OTel-GenAI traces to http://127.0.0.1:8000/v1/traces
+
+with sw.workflow("research-swarm", input=user_request):
+    with sw.agent("planner", inputs_from=[], input=user_request):
+        with sw.chat("grok-4.20", input=user_request, output=plan,
+                     input_tokens=850, output_tokens=280):
+            ...
+    with sw.agent("worker-1", inputs_from=["planner"], input=subtask):
+        with sw.tool("web_search", output=results):
+            ...
+        with sw.chat("grok-4.20", output=recommendation,
+                     input_tokens=1400, output_tokens=420):
+            ...
+
+sw.shutdown()
+```
+
+Open **http://127.0.0.1:8000/?mode=live** and watch your swarm light up. A complete worked example is in [`examples/from_scratch_loop.py`](examples/from_scratch_loop.py).
+
+Already on OpenTelemetry? Point your existing OTLP exporter at `/v1/traces` (protobuf or JSON) — no SDK required.
 
 ## How it works
 
