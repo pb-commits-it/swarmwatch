@@ -39,6 +39,11 @@ Because it speaks OpenTelemetry, it works with **LangGraph, CrewAI, AutoGen, the
 </p>
 <p align="center"><sub>The Handoff Inspector (v0.3): click the planner→worker-1 edge and see the terms — “time-series”, “telemetry”, “sensor readings” — that didn’t survive the handoff. The bug lives in the edge, not the node.</sub></p>
 
+<p align="center">
+  <img src="docs/constellation.png" alt="The 3D Constellation view — agents as glowing spheres in space with bloom" width="820">
+</p>
+<p align="center"><sub>The 3D Constellation (v0.4): the same topology, rendered with bloom on a near-black field. Slow auto-rotation when live; <code>?rotate=0</code> for a static frame.</sub></p>
+
 ## Status
 
 Building in public, in stages. See **[ROADMAP.md](ROADMAP.md)** for what's shipping when.
@@ -46,8 +51,8 @@ Building in public, in stages. See **[ROADMAP.md](ROADMAP.md)** for what's shipp
 - **v0.1 — *It records*** · ingest + replay + span model — ✅ shipped
 - **v0.2 — *It comes alive*** · the 2D Living Graph — ✅ shipped
 - **v0.3 — *It debugs*** · DevTools mode + Handoff Inspector — ✅ shipped
-- **v0.4 — *It's beautiful*** · 3D Constellation — _next_
-- **v1.0 — *Launch*** · SDK, framework integrations, hosted demo
+- **v0.4 — *It's beautiful*** · 3D Constellation — ✅ shipped
+- **v1.0 — *Launch*** · SDK, framework integrations, hosted demo — _next_
 
 ## Quickstart
 
@@ -61,7 +66,7 @@ swarmwatch up
 
 Open **http://127.0.0.1:8000** and watch the bundled planner→worker→judge swarm replay live in the **Living Graph** — handoffs animate as particle flows, nodes pulse as they fire LLM/tool calls. Switch to **DevTools** for the span flamegraph, and **click any handoff edge** to open the Inspector and see the context that got dropped between agents. Point it at your own recorded run with `swarmwatch up --trace path/to/trace.jsonl`.
 
-> v0.3 ships the recorder, the animated Living Graph, the DevTools flamegraph, and the Handoff Inspector. The 3D Constellation lands in v0.4 (see the [roadmap](ROADMAP.md)).
+> v0.4 ships all three view modes — Living Graph, 3D Constellation, DevTools — plus the Handoff Inspector. v1.0 (SDK + framework integrations + hosted demo) is next on the [roadmap](ROADMAP.md).
 
 ## How it works
 

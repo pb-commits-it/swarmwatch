@@ -1,9 +1,14 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { agentSpan } from "./analysis";
 import DevTools from "./DevTools";
 import Inspector, { InspectorState } from "./Inspector";
 import LivingGraph, { Activity } from "./LivingGraph";
 import { AgentSummary, FullTrace, ROLE_COLORS, roleOf, SpanEvent } from "./types";
+
+// three.js is heavy — only load the 3D view (and three) when it's opened.
+const Constellation = lazy(() => import("./Constellation"));
+
+type View = "graph" | "constellation" | "devtools";
 
 interface Counters {
   spans: number;
@@ -41,7 +46,7 @@ function useDimensions() {
 
 export default function App() {
   const [status, setStatus] = useState("connecting");
-  const [view, setView] = useState<"graph" | "devtools">("graph");
+  const [view, setView] = useState<View>("graph");
   const [workflow, setWorkflow] = useState<string | null>(null);
   const [counters, setCounters] = useState<Counters>(ZERO);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
@@ -133,8 +138,8 @@ export default function App() {
     };
   }
 
-  // Load the full trace once (for the graph topology, DevTools, and the
-  // Handoff Inspector), then start the live replay stream.
+  // Load the full trace once (graph topology, DevTools, Handoff Inspector),
+  // then start the live replay stream.
   useEffect(() => {
     let alive = true;
     fetch("/api/trace")
@@ -159,7 +164,7 @@ export default function App() {
         // Deep links: share a view, a handoff, or a span directly.
         const p = new URLSearchParams(window.location.search);
         const v = p.get("view");
-        if (v === "devtools" || v === "graph") setView(v);
+        if (v === "devtools" || v === "graph" || v === "constellation") setView(v);
         const src = p.get("src");
         const dst = p.get("dst");
         const span = p.get("span");
@@ -190,6 +195,7 @@ export default function App() {
   const statusLabel =
     status === "replaying" ? "replaying" : status === "done" ? "replay complete" : status;
   const pillClass = status === "replaying" ? "live" : status === "done" ? "done" : "";
+  const showPanels = view === "graph" || view === "constellation";
 
   return (
     <div className="app">
@@ -198,18 +204,21 @@ export default function App() {
           <span className="dot" /> swarmwatch
         </div>
         <div className="tabs">
-          <button className={`tab ${view === "graph" ? "active" : ""}`} onClick={() => setView("graph")}>
-            Living Graph
-          </button>
-          <button
-            className={`tab ${view === "devtools" ? "active" : ""}`}
-            onClick={() => setView("devtools")}
-          >
-            DevTools
-          </button>
-          <button className="tab" disabled title="3D Constellation — coming in v0.4">
-            3D · v0.4
-          </button>
+          {(
+            [
+              ["graph", "Living Graph"],
+              ["constellation", "Constellation"],
+              ["devtools", "DevTools"],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              className={`tab ${view === v ? "active" : ""}`}
+              onClick={() => setView(v)}
+            >
+              {label}
+            </button>
+          ))}
         </div>
         <span className="workflow">{workflow ? `workflow: ${workflow}` : "—"}</span>
         <span className="spacer" />
@@ -247,16 +256,32 @@ export default function App() {
 
       <div className="stage" ref={stageRef}>
         {view === "graph" && graphData && (
-          <>
-            <LivingGraph
+          <LivingGraph
+            graphData={graphData}
+            width={dim.width}
+            height={dim.height}
+            activityRef={activityRef}
+            fgRef={fgRef}
+            onLinkClick={inspectHandoff}
+            onNodeClick={inspectNode}
+          />
+        )}
+
+        {view === "constellation" && graphData && (
+          <Suspense fallback={<div className="loading3d">loading 3D…</div>}>
+            <Constellation
               graphData={graphData}
               width={dim.width}
               height={dim.height}
-              activityRef={activityRef}
               fgRef={fgRef}
               onLinkClick={inspectHandoff}
               onNodeClick={inspectNode}
             />
+          </Suspense>
+        )}
+
+        {showPanels && graphData && (
+          <>
             <div className="float agents">
               <h2>Agents</h2>
               {agents.map((a) => {

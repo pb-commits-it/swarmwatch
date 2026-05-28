@@ -34,11 +34,13 @@ The "not a toy" proof.
 
 _Exit: you can find a real bug in the space between agents._ ✅
 
-### v0.4 — *It's beautiful*
+### v0.4 — *It's beautiful* ✅
 The showpiece.
-- 3D **Constellation** (react-three-fiber + bloom)
-- View-mode switcher across Living Graph / Constellation / DevTools
-- Motion polish: spring entry, hover halos, edge-draw easing
+- 3D **Constellation** (react-force-graph-3d + three.js + UnrealBloomPass) — emissive nodes with bloom, particle handoffs, slow auto-rotation — ✅
+- View-mode switcher across Living Graph / Constellation / DevTools — ✅
+- Lazy-loaded so three.js only downloads when the 3D tab is opened (initial bundle stays ~350 KB) — ✅
+- `?rotate=0` flag to capture a static frame — ✅
+- Motion polish: spring entry, hover halos, edge-draw easing — _later (polish pass before v1.0)_
 
 _Exit: the showpiece video exists._
 

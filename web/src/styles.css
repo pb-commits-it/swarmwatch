@@ -115,3 +115,5 @@ button:hover { border-color: var(--llm); }
 .chip.llm { color: #38bdf8; background: rgba(56,189,248,.14); }
 .chip.tool { color: #fbbf24; background: rgba(251,191,36,.14); }
 .chip.workflow, .chip.other { color: #94a3b8; background: rgba(148,163,184,.14); }
+
+.loading3d { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); font-family: ui-monospace, monospace; font-size: 13px; letter-spacing: 0.5px; }
