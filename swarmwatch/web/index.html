@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>swarmwatch</title>
+<style>
+  :root {
+    --bg: #070b12;
+    --panel: #0e1422;
+    --panel-2: #131b2c;
+    --line: #1e2940;
+    --text: #c9d6ee;
+    --muted: #6b7c9c;
+    --agent: #a78bfa;
+    --llm: #38bdf8;
+    --tool: #fbbf24;
+    --workflow: #64748b;
+    --ok: #34d399;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: radial-gradient(1200px 600px at 70% -10%, #11203a 0%, var(--bg) 55%);
+    color: var(--text);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    height: 100vh; display: flex; flex-direction: column;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 22px; border-bottom: 1px solid var(--line);
+    background: rgba(10,15,25,0.6); backdrop-filter: blur(6px);
+  }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: .2px; font-size: 16px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; background: var(--llm); box-shadow: 0 0 14px 2px var(--llm); }
+  .workflow { color: var(--muted); font-family: ui-monospace, monospace; font-size: 13px; }
+  .spacer { flex: 1; }
+  .pill {
+    font-size: 12px; padding: 4px 11px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--muted); font-family: ui-monospace, monospace;
+  }
+  .pill.live { color: var(--ok); border-color: rgba(52,211,153,.4); }
+  .pill.live::before { content: "● "; }
+  .pill.done { color: var(--llm); border-color: rgba(56,189,248,.4); }
+  select, button {
+    font: inherit; color: var(--text); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover { border-color: var(--llm); }
+  .counters { display: flex; gap: 26px; padding: 12px 22px; border-bottom: 1px solid var(--line); }
+  .counter .n { font-size: 22px; font-weight: 700; font-family: ui-monospace, monospace; }
+  .counter .l { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  main { flex: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 0; }
+  .lanes { border-right: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+  .lanes h2, .feed h2 { font-size: 11px; text-transform: uppercase; letter-spacing: 1.4px; color: var(--muted); margin: 0 0 12px; }
+  .agent-card {
+    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--workflow);
+    border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; opacity: .55;
+    transition: opacity .25s, box-shadow .25s, transform .25s;
+  }
+  .agent-card.seen { opacity: 1; }
+  .agent-card.active { box-shadow: 0 0 0 1px currentColor, 0 0 22px -4px currentColor; transform: translateY(-1px); }
+  .agent-card .name { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .agent-card .role { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); }
+  .agent-card .stats { display: flex; gap: 16px; margin-top: 8px; font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+  .agent-card .stats b { color: var(--text); font-weight: 600; }
+  .agent-card .from { margin-top: 6px; font-size: 11px; color: var(--muted); font-family: ui-monospace, monospace; }
+  .feed { padding: 16px; overflow-y: auto; }
+  .row {
+    display: grid; grid-template-columns: 64px 92px 96px 1fr auto;
+    gap: 12px; align-items: baseline; padding: 8px 10px; border-radius: 8px;
+    font-family: ui-monospace, monospace; font-size: 12.5px;
+    animation: fade .35s ease both; border: 1px solid transparent;
+  }
+  .row:hover { background: var(--panel); border-color: var(--line); }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .t { color: var(--muted); }
+  .chip { font-size: 10px; text-transform: uppercase; letter-spacing: .6px; padding: 2px 8px; border-radius: 6px; text-align: center; }
+  .chip.agent { color: var(--agent); background: rgba(167,139,250,.12); }
+  .chip.llm { color: var(--llm); background: rgba(56,189,248,.12); }
+  .chip.tool { color: var(--tool); background: rgba(251,191,36,.12); }
+  .chip.workflow { color: var(--workflow); background: rgba(100,116,139,.14); }
+  .who { color: var(--text); }
+  .detail { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .meta { color: var(--muted); }
+  .empty { color: var(--muted); padding: 30px 10px; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand"><span class="dot"></span> swarmwatch</div>
+    <span class="workflow" id="workflow">—</span>
+    <span class="spacer"></span>
+    <span class="pill" id="status">idle</span>
+    <select id="speed" title="Replay speed">
+      <option value="1">1×</option>
+      <option value="2">2×</option>
+      <option value="4">4×</option>
+      <option value="0.5">0.5×</option>
+    </select>
+    <button id="replay">↻ Replay</button>
+  </header>
+
+  <div class="counters">
+    <div class="counter"><div class="n" id="c-spans">0</div><div class="l">spans</div></div>
+    <div class="counter"><div class="n" id="c-agents">0</div><div class="l">agents</div></div>
+    <div class="counter"><div class="n" id="c-llm">0</div><div class="l">llm calls</div></div>
+    <div class="counter"><div class="n" id="c-tools">0</div><div class="l">tool calls</div></div>
+    <div class="counter"><div class="n" id="c-tokens">0</div><div class="l">tokens</div></div>
+  </div>
+
+  <main>
+    <section class="lanes">
+      <h2>Agents</h2>
+      <div id="lanes"></div>
+    </section>
+    <section class="feed">
+      <h2>Live span feed</h2>
+      <div id="feed"><div class="empty">Connecting to the trace…</div></div>
+    </section>
+  </main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const ROLE_COLORS = { planner: "#a78bfa", worker: "#38bdf8", judge: "#34d399" };
+let es = null, t0 = null, totals = {};
+
+function roleOf(name) {
+  const n = name.toLowerCase();
+  if (n.includes("planner")) return ["planner", ROLE_COLORS.planner];
+  if (n.includes("judge")) return ["judge", ROLE_COLORS.judge];
+  if (n.includes("worker")) return ["worker", ROLE_COLORS.worker];
+  return ["agent", "#94a3b8"];
+}
+function tokensOf(s) { return (s.usage?.input_tokens || 0) + (s.usage?.output_tokens || 0); }
+function durMs(s) { return Math.max(0, new Date(s.end_time) - new Date(s.start_time)); }
+
+function reset() {
+  $("feed").innerHTML = '<div class="empty">Connecting to the trace…</div>';
+  $("lanes").innerHTML = "";
+  $("workflow").textContent = "—";
+  ["spans","agents","llm","tools","tokens"].forEach((k) => $("c-" + k).textContent = "0");
+  totals = { spans: 0, agents: 0, llm: 0, tools: 0, tokens: 0 };
+  t0 = null;
+}
+function bump(key, by = 1) { totals[key] += by; $("c-" + key).textContent = totals[key].toLocaleString(); }
+
+function drawLanes(agents) {
+  totals.agents = agents.length; $("c-agents").textContent = agents.length;
+  $("lanes").innerHTML = "";
+  for (const a of agents) {
+    const [role, color] = roleOf(a.name);
+    const card = document.createElement("div");
+    card.className = "agent-card"; card.id = "lane-" + a.name;
+    card.style.borderLeftColor = color; card.style.color = color;
+    const from = (a.inputs_from && a.inputs_from.length) ? "◂ " + a.inputs_from.join(", ") : "◂ user";
+    card.innerHTML =
+      `<div class="name" style="color:var(--text)">${a.name}<span class="role">${role}</span></div>
+       <div class="stats"><span>llm <b data-llm>0</b></span><span>tools <b data-tools>0</b></span><span>tok <b data-tok>0</b></span></div>
+       <div class="from">${from}</div>`;
+    $("lanes").appendChild(card);
+  }
+}
+
+function flashLane(name, kind, span) {
+  const card = $("lane-" + name); if (!card) return;
+  card.classList.add("seen");
+  if (kind === "llm") card.querySelector("[data-llm]").textContent = +card.querySelector("[data-llm]").textContent + 1;
+  if (kind === "tool") card.querySelector("[data-tools]").textContent = +card.querySelector("[data-tools]").textContent + 1;
+  const tok = card.querySelector("[data-tok]");
+  tok.textContent = (+tok.textContent + tokensOf(span)).toLocaleString();
+  card.classList.add("active");
+  clearTimeout(card._t);
+  card._t = setTimeout(() => card.classList.remove("active"), 900);
+}
+
+function addRow(s) {
+  if (t0 === null) t0 = new Date(s.start_time).getTime();
+  const feed = $("feed");
+  if (feed.firstChild && feed.firstChild.className === "empty") feed.innerHTML = "";
+  const off = ((new Date(s.start_time).getTime() - t0) / 1000).toFixed(1);
+  const detail = s.kind === "llm" ? (s.model || "model")
+    : s.kind === "tool" ? (s.tool || "tool")
+    : s.name;
+  const meta = s.kind === "llm" ? `${tokensOf(s)} tok · ${Math.round(durMs(s))}ms`
+    : `${Math.round(durMs(s))}ms`;
+  const row = document.createElement("div");
+  row.className = "row";
+  row.innerHTML =
+    `<span class="t">+${off}s</span>
+     <span class="chip ${s.kind}">${s.kind}</span>
+     <span class="who">${s.agent || "—"}</span>
+     <span class="detail">${detail}</span>
+     <span class="meta">${meta}</span>`;
+  feed.appendChild(row);
+  feed.scrollTop = feed.scrollHeight;
+}
+
+function onSpan(s) {
+  bump("spans");
+  if (s.kind === "llm") { bump("llm"); bump("tokens", tokensOf(s)); }
+  if (s.kind === "tool") bump("tools");
+  if (s.agent) flashLane(s.agent, s.kind, s);
+  addRow(s);
+}
+
+function connect() {
+  if (es) es.close();
+  reset();
+  const speed = $("speed").value;
+  $("status").className = "pill live"; $("status").textContent = "replaying";
+  es = new EventSource(`/api/stream?speed=${speed}`);
+  es.addEventListener("trace", (e) => {
+    const d = JSON.parse(e.data);
+    $("workflow").textContent = d.workflow ? `workflow: ${d.workflow}` : d.trace_id;
+    drawLanes(d.agents);
+  });
+  es.addEventListener("span", (e) => onSpan(JSON.parse(e.data)));
+  es.addEventListener("done", () => {
+    es.close();
+    $("status").className = "pill done"; $("status").textContent = "replay complete";
+  });
+  es.onerror = () => { $("status").className = "pill"; $("status").textContent = "disconnected"; es.close(); };
+}
+
+$("replay").addEventListener("click", connect);
+$("speed").addEventListener("change", connect);
+connect();
+</script>
+</body>
+</html>

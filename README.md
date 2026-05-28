@@ -33,11 +33,25 @@ Because it speaks OpenTelemetry, it works with **LangGraph, CrewAI, AutoGen, the
 
 Building in public, in stages. See **[ROADMAP.md](ROADMAP.md)** for what's shipping when.
 
-- **v0.1 — *It records*** · ingest + replay + span model — _in progress_
-- **v0.2 — *It comes alive*** · the 2D Living Graph
+- **v0.1 — *It records*** · ingest + replay + span model — ✅ shipped
+- **v0.2 — *It comes alive*** · the 2D Living Graph — _next_
 - **v0.3 — *It debugs*** · DevTools mode + Handoff Inspector
 - **v0.4 — *It's beautiful*** · 3D Constellation
 - **v1.0 — *Launch*** · SDK, framework integrations, hosted demo
+
+## Quickstart
+
+```bash
+git clone https://github.com/pb-commits-it/swarmwatch
+cd swarmwatch
+python -m venv .venv && source .venv/bin/activate
+pip install -e .
+swarmwatch up
+```
+
+Open **http://127.0.0.1:8000** and watch the bundled planner→worker→judge swarm replay — agent lanes light up as each one works, and the spans land in a live feed. Point it at your own recorded run with `swarmwatch up --trace path/to/trace.jsonl`.
+
+> v0.1 ships the recorder and a live span feed. The animated Living Graph, the 3D Constellation, and the Handoff Inspector land in v0.2–v0.4 (see the [roadmap](ROADMAP.md)).
 
 ## How it works
 
