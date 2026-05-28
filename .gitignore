@@ -1,0 +1,30 @@
+# Build-in-public strategy notes — never publish
+.notes/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# DuckDB / local data
+*.duckdb
+*.duckdb.wal
+
+# Node / frontend
+node_modules/
+web/dist/
+*.local
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
