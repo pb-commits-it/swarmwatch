@@ -15,10 +15,12 @@ The pipe, end to end.
 
 _Exit: a recorded trace flows from ingest to browser._
 
-### v0.2 — *It comes alive*
+### v0.2 — *It comes alive* ✅
 The hero.
-- 2D **Living Graph** (cosmos.gl / react-force-graph): agents as nodes, particle-flow edges on handoffs, nodes pulsing on tool calls, dark canvas + glow
-- Live mode (SSE) + replay mode with a **timeline scrubber**
+- 2D **Living Graph** (react-force-graph): agents as nodes in a top-down DAG, particle-flow edges on handoffs, nodes pulsing on LLM/tool calls, dark canvas + glow — ✅
+- React + Vite + TypeScript frontend, built into the package and served by FastAPI — ✅
+- Replay + speed control over SSE — ✅
+- A draggable **timeline scrubber** (scrub backward through a run) — deferred to v0.3
 
 _Exit: the looping hero GIF exists._
 

@@ -11,6 +11,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sse_starlette.sse import EventSourceResponse
 
 from swarmwatch import __version__
@@ -71,6 +72,11 @@ def create_app(trace_path: str | Path | None = None) -> FastAPI:
     @app.get("/")
     def index() -> FileResponse:
         return FileResponse(WEB_DIR / "index.html")
+
+    # The built frontend (Vite output) ships inside the package.
+    assets_dir = WEB_DIR / "assets"
+    if assets_dir.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
     return app
 
