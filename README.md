@@ -1,12 +1,19 @@
 <h1 align="center">swarmwatch</h1>
 
 <p align="center">
+  <b>📦 Archived as a portfolio artifact.</b><br>
+  Its bones (React/Vite shell, FastAPI+SSE backend, build-in-public rhythm) live on in <a href="https://github.com/pb-commits-it/whorl"><b>Whorl</b></a>, an open-source crop-scouting dashboard for Midwest farmers and agronomists. Built by a PhD entomologist, on the same engineering substrate.
+</p>
+
+<hr>
+
+<p align="center">
   <b>A flight recorder for AI agent swarms.</b><br>
   Watch your agents think — live — then scrub back to find the exact moment one handed bad context to another.
 </p>
 
 <p align="center">
-  <i>🚧 Building in public. Follow along — releases land in stages (see the <a href="ROADMAP.md">roadmap</a>).</i>
+  <i>🏁 Shipped through v1.0 in late May 2026.</i>
 </p>
 
 <p align="center">
