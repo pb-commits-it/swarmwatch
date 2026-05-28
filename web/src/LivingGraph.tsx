@@ -17,6 +17,8 @@ interface Props {
   height: number;
   activityRef: MutableRefObject<Map<string, Activity>>;
   fgRef: MutableRefObject<any>;
+  onLinkClick?: (src: string, dst: string) => void;
+  onNodeClick?: (id: string) => void;
 }
 
 function withAlpha(hex: string, a: number): string {
@@ -27,7 +29,15 @@ function withAlpha(hex: string, a: number): string {
   return `rgba(${r},${g},${b},${a})`;
 }
 
-export default function LivingGraph({ graphData, width, height, activityRef, fgRef }: Props) {
+export default function LivingGraph({
+  graphData,
+  width,
+  height,
+  activityRef,
+  fgRef,
+  onLinkClick,
+  onNodeClick,
+}: Props) {
   // Spread siblings (e.g. parallel workers) apart so their labels don't collide,
   // and give edges a bit more length for the top-down flow to breathe.
   useEffect(() => {
@@ -49,8 +59,14 @@ export default function LivingGraph({ graphData, width, height, activityRef, fgR
       dagLevelDistance={64}
       cooldownTicks={140}
       d3VelocityDecay={0.28}
-      linkColor={() => "rgba(120,140,170,0.22)"}
-      linkWidth={1.2}
+      linkColor={() => "rgba(120,140,170,0.28)"}
+      linkWidth={2}
+      onNodeClick={(node: any) => onNodeClick?.(node.id)}
+      onLinkClick={(link: any) => {
+        const s = typeof link.source === "object" ? link.source.id : link.source;
+        const t = typeof link.target === "object" ? link.target.id : link.target;
+        onLinkClick?.(s, t);
+      }}
       linkDirectionalParticles={0}
       linkDirectionalParticleSpeed={0.012}
       linkDirectionalParticleWidth={3}

@@ -24,13 +24,15 @@ The hero.
 
 _Exit: the looping hero GIF exists._
 
-### v0.3 — *It debugs*
+### v0.3 — *It debugs* ✅
 The "not a toy" proof.
-- **DevTools** view: React Flow structured workflow graph + custom span **flamegraph**
-- **Handoff Inspector**: click an edge → the literal prompt/response that crossed between agents, diffed to surface lossy summarization
-- Causal root-cause trace: click a bad output, walk backward to where it broke
+- **DevTools** view: a span **flamegraph** (timeline waterfall) + a clickable handoffs list — ✅
+- **Handoff Inspector**: click an edge → what one agent produced vs. what the next received, with the terms from the original request that didn't survive the handoff flagged — ✅
+- Deep links (`?view=`, `?src=&dst=`, `?span=`) to share a specific handoff or span — ✅ (bonus)
+- View switcher across Living Graph / DevTools — ✅
+- Causal root-cause trace (click a bad output, walk backward to the break) — deferred; the dropped-term diff is the first cut of this
 
-_Exit: you can find a real bug in the space between agents._
+_Exit: you can find a real bug in the space between agents._ ✅
 
 ### v0.4 — *It's beautiful*
 The showpiece.

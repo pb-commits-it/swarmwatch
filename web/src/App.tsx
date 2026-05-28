@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import { agentSpan } from "./analysis";
+import DevTools from "./DevTools";
+import Inspector, { InspectorState } from "./Inspector";
 import LivingGraph, { Activity } from "./LivingGraph";
-import { AgentSummary, ROLE_COLORS, roleOf, SpanEvent, TraceSummary } from "./types";
+import { AgentSummary, FullTrace, ROLE_COLORS, roleOf, SpanEvent } from "./types";
 
 interface Counters {
   spans: number;
@@ -38,11 +41,14 @@ function useDimensions() {
 
 export default function App() {
   const [status, setStatus] = useState("connecting");
+  const [view, setView] = useState<"graph" | "devtools">("graph");
   const [workflow, setWorkflow] = useState<string | null>(null);
   const [counters, setCounters] = useState<Counters>(ZERO);
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [live, setLive] = useState<Record<string, Live>>({});
   const [graphData, setGraphData] = useState<GraphData | null>(null);
+  const [fullTrace, setFullTrace] = useState<FullTrace | null>(null);
+  const [inspector, setInspector] = useState<InspectorState>(null);
   const [speed, setSpeed] = useState("1");
 
   const fgRef = useRef<any>(undefined);
@@ -104,28 +110,17 @@ export default function App() {
     esRef.current?.close();
     activityRef.current.clear();
     setCounters(ZERO);
-    setLive({});
+    setLive((prev) => {
+      const z: Record<string, Live> = {};
+      Object.keys(prev).forEach((k) => (z[k] = { llm: 0, tool: 0, tokens: 0, activeAt: 0 }));
+      return z;
+    });
     setStatus("replaying");
 
     const es = new EventSource(`/api/stream?speed=${spd}`);
     esRef.current = es;
-
-    es.addEventListener("trace", (e: MessageEvent) => {
-      const d: TraceSummary = JSON.parse(e.data);
-      setWorkflow(d.workflow);
-      setAgents(d.agents);
-      const nodes = d.agents.map((a) => {
-        const role = roleOf(a.name);
-        return { id: a.name, role, color: ROLE_COLORS[role] };
-      });
-      const links = d.edges.map((ed) => ({ source: ed.src, target: ed.dst }));
-      const gd: GraphData = { nodes, links };
-      graphDataRef.current = gd;
-      setGraphData(gd);
-      const init: Record<string, Live> = {};
-      d.agents.forEach((a) => (init[a.name] = { llm: 0, tool: 0, tokens: 0, activeAt: 0 }));
-      setLive(init);
-      setTimeout(() => fgRef.current?.zoomToFit(500, 70), 450);
+    es.addEventListener("trace", () => {
+      setTimeout(() => fgRef.current?.zoomToFit(500, 70), 300);
     });
     es.addEventListener("span", (e: MessageEvent) => onSpan(JSON.parse(e.data)));
     es.addEventListener("done", () => {
@@ -138,11 +133,59 @@ export default function App() {
     };
   }
 
+  // Load the full trace once (for the graph topology, DevTools, and the
+  // Handoff Inspector), then start the live replay stream.
   useEffect(() => {
-    connect();
-    return () => esRef.current?.close();
+    let alive = true;
+    fetch("/api/trace")
+      .then((r) => r.json())
+      .then((d: FullTrace) => {
+        if (!alive) return;
+        setFullTrace(d);
+        setWorkflow(d.workflow);
+        setAgents(d.agents);
+        const nodes = d.agents.map((a) => {
+          const role = roleOf(a.name);
+          return { id: a.name, role, color: ROLE_COLORS[role] };
+        });
+        const links = d.edges.map((e) => ({ source: e.src, target: e.dst }));
+        const gd: GraphData = { nodes, links };
+        graphDataRef.current = gd;
+        setGraphData(gd);
+        const init: Record<string, Live> = {};
+        d.agents.forEach((a) => (init[a.name] = { llm: 0, tool: 0, tokens: 0, activeAt: 0 }));
+        setLive(init);
+
+        // Deep links: share a view, a handoff, or a span directly.
+        const p = new URLSearchParams(window.location.search);
+        const v = p.get("view");
+        if (v === "devtools" || v === "graph") setView(v);
+        const src = p.get("src");
+        const dst = p.get("dst");
+        const span = p.get("span");
+        if (src && dst) setInspector({ type: "handoff", src, dst });
+        else if (span) setInspector({ type: "span", spanId: span });
+
+        connect();
+      });
+    return () => {
+      alive = false;
+      esRef.current?.close();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function inspectSpan(id: string) {
+    setInspector({ type: "span", spanId: id });
+  }
+  function inspectHandoff(src: string, dst: string) {
+    setInspector({ type: "handoff", src, dst });
+  }
+  function inspectNode(name: string) {
+    if (!fullTrace) return;
+    const s = agentSpan(fullTrace.spans, name);
+    if (s) setInspector({ type: "span", spanId: s.span_id });
+  }
 
   const statusLabel =
     status === "replaying" ? "replaying" : status === "done" ? "replay complete" : status;
@@ -153,6 +196,20 @@ export default function App() {
       <header>
         <div className="brand">
           <span className="dot" /> swarmwatch
+        </div>
+        <div className="tabs">
+          <button className={`tab ${view === "graph" ? "active" : ""}`} onClick={() => setView("graph")}>
+            Living Graph
+          </button>
+          <button
+            className={`tab ${view === "devtools" ? "active" : ""}`}
+            onClick={() => setView("devtools")}
+          >
+            DevTools
+          </button>
+          <button className="tab" disabled title="3D Constellation — coming in v0.4">
+            3D · v0.4
+          </button>
         </div>
         <span className="workflow">{workflow ? `workflow: ${workflow}` : "—"}</span>
         <span className="spacer" />
@@ -189,45 +246,56 @@ export default function App() {
       </div>
 
       <div className="stage" ref={stageRef}>
-        {graphData && (
-          <LivingGraph
-            graphData={graphData}
-            width={dim.width}
-            height={dim.height}
-            activityRef={activityRef}
-            fgRef={fgRef}
-          />
+        {view === "graph" && graphData && (
+          <>
+            <LivingGraph
+              graphData={graphData}
+              width={dim.width}
+              height={dim.height}
+              activityRef={activityRef}
+              fgRef={fgRef}
+              onLinkClick={inspectHandoff}
+              onNodeClick={inspectNode}
+            />
+            <div className="float agents">
+              <h2>Agents</h2>
+              {agents.map((a) => {
+                const l = live[a.name] || { llm: 0, tool: 0, tokens: 0, activeAt: 0 };
+                const active = l.activeAt > 0 && Date.now() - l.activeAt < 1100;
+                const color = ROLE_COLORS[roleOf(a.name)];
+                return (
+                  <div className={`agent ${active ? "active" : ""}`} key={a.name} style={{ color }}>
+                    <span className="swatch" style={{ background: color }} />
+                    <span className="nm">{a.name}</span>
+                    <span className="ct">
+                      {l.llm}·{l.tool} · {l.tokens.toLocaleString()}t
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="float legend">
+              <h2>Legend</h2>
+              <div className="row">
+                <span className="key" style={{ borderColor: "#7dd3fc" }} /> handoff — particles are
+                context flowing
+              </div>
+              <div className="note">
+                <b>Click any edge</b> to inspect the handoff — see what one agent sent vs. what the
+                next received. Watch the planner drop “time-series” into <b>worker-1</b>; the swarm
+                then picks the wrong database. The bug lives in the edge.
+              </div>
+            </div>
+          </>
         )}
 
-        <div className="float agents">
-          <h2>Agents</h2>
-          {agents.map((a) => {
-            const l = live[a.name] || { llm: 0, tool: 0, tokens: 0, activeAt: 0 };
-            const active = l.activeAt > 0 && Date.now() - l.activeAt < 1100;
-            const color = ROLE_COLORS[roleOf(a.name)];
-            return (
-              <div className={`agent ${active ? "active" : ""}`} key={a.name} style={{ color }}>
-                <span className="swatch" style={{ background: color }} />
-                <span className="nm">{a.name}</span>
-                <span className="ct">
-                  {l.llm}·{l.tool} · {l.tokens.toLocaleString()}t
-                </span>
-              </div>
-            );
-          })}
-        </div>
+        {view === "devtools" && fullTrace && (
+          <DevTools trace={fullTrace} onSpan={inspectSpan} onHandoff={inspectHandoff} />
+        )}
 
-        <div className="float legend">
-          <h2>Legend</h2>
-          <div className="row">
-            <span className="key" style={{ borderColor: "#7dd3fc" }} /> handoff — particles are context flowing
-          </div>
-          <div className="note">
-            Watch the <b>planner</b> drop the “time-series” qualifier when it hands off to{" "}
-            <b>worker-1</b> — the swarm then recommends the wrong database. The bug lives in the
-            edge, not the node.
-          </div>
-        </div>
+        {fullTrace && (
+          <Inspector state={inspector} trace={fullTrace} onClose={() => setInspector(null)} />
+        )}
       </div>
     </div>
   );
